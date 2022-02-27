@@ -78,10 +78,11 @@ class WheelSensor:
             Args:
             debounce_time (float): the minimum time (in seconds) required between triggers (default 0.1s)
         """
-        self._logger.debug("push button ISR callback triggered")
+        self._logger.debug("ISR filter callback triggered")
         now = time.time()
         dt = now-self.last_called
         if dt > debounce_time:
+            self._logger.debug('pulse detected')
             self.timing_buff.append(now)
         self.last_called = time.time()
 
