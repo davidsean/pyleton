@@ -1,5 +1,5 @@
 
-
+import time
 import argparse
 
 from pyleton.bike_player import BikePlayer
@@ -20,3 +20,7 @@ if __name__ == '__main__':
     bp = BikePlayer()
     bp.play_file(args.fname)
     ws = WheelSensor(bp.set_speed, ref_speed=args.ref)
+
+    while True:
+        time.sleep(1)
+        print(ws.get_speed())

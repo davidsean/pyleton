@@ -3,6 +3,8 @@ import time
 
 
 class BikePlayer:
+    """ BikePlayer class handles opening the media and handling playback
+    """
 
     def __init__(self):
         # self.vlc_instance = vlc.Instance('--verbose 2'.split())
@@ -13,6 +15,11 @@ class BikePlayer:
         self.player.stop()
 
     def play_file(self, fname: str) -> None:
+        """plays file
+
+        :param fname: file name to play
+        :type fname: str
+        """
         self.player.stop()
         media = self.vlc_instance.media_new(fname)
 
@@ -20,11 +27,9 @@ class BikePlayer:
         self.player.play()
 
     def set_speed(self, rate: float):
+        """set playback speed
+
+        :param rate: rate (1 is same, 2 is twice as fast)
+        :type rate: float
+        """
         self.player.set_rate(rate)
-
-
-if __name__ == "__main__":
-    bp = BikePlayer()
-    bp.play_file('RedHeart.mp3')
-    while True:
-        time.sleep(1)
