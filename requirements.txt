@@ -1,1 +1,2 @@
 python-vlc~=3.0
+pigpio~=1.78
