@@ -39,10 +39,9 @@ class WheelSensor:
         self.ref_speed = ref_speed * self.cps_2_kph
 
         self.last_called = time.time()
-
         #  init the pulse buffer with pulses one second apart
         self.timing_buff = collections.deque(maxlen=10)
-        for i in range(10):
+        for i in range(20):
             self.timing_buff.append(self.last_called+i)
 
         error_code = wiringpi.wiringPiSetupGpio()
@@ -96,4 +95,3 @@ class WheelSensor:
         # speed as percent of target
         self._logger.debug("speed: {speed/self.ref_speed} % of target")
         return speed
-
