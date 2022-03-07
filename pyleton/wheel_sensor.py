@@ -1,20 +1,24 @@
 # -*- coding: utf-8 -*-
 
 import time
+import bisect
 import logging
-import wiringpi
 import collections
+
+import pigpio
 
 from statistics import mean
 from typing import Callable
 
 
 class WheelSensor:
+    """Wheel sensor class handles speed and gpio access
+    """
 
     def __init__(self,
                  callback: Callable,
-                 pin: int = 29,
-                 radius: float = 350,
+                 pin: int = 21,
+                 radius: float = .311,  # for 700cc
                  ref_speed: float = 20.0) -> None:
         """
         init
@@ -22,76 +26,98 @@ class WheelSensor:
         Args:
             callback (function): callback function wheel rotation detection this is called on every detected pusle with agrument of wheel speed %
             pin (int): the GPIO pin number for the reed switch (default pin 29)
-            radius (int): The wheel radius, in cm (default 350)
+            radius (float): The wheel radius in m (default 311mm)
+            ref_speed (float): the reference speed in km/h
         """
 
         self._logger = logging.getLogger(__name__)
+        # logging.basicConfig(level=logging.DEBUG)
+
         self.pin = pin
         self.callback = callback
 
         # wheel circumference
-        self.circumference = 2*3.14*(radius*100)
+        self.circumference = 2 * 3.14 * (radius)
         # convert km/h to wheel circumferences per second
-        self.kph_2_cps = 1000 / (60*60*self.circumference)
-        self.cps_2_kph = 1/self.kph_2_cps
+        self.kph_2_cps = 1000. / (60 * 60 * self.circumference)
+        self.cps_2_kph = 1. / self.kph_2_cps
 
         # set reference speed in cps
-        self.ref_speed = ref_speed * self.cps_2_kph
-
+        self.inv_ref_speed = 1 / (ref_speed * self.kph_2_cps)
+        self._logger.info(
+            "ref speed of %s cps", 1 / self.inv_ref_speed)
         self.last_called = time.time()
         #  init the pulse buffer with pulses one second apart
-        self.timing_buff = collections.deque(maxlen=10)
-        for i in range(20):
-            self.timing_buff.append(self.last_called+i)
+        self.time_len = 20
+        self.timing_buff = collections.deque(maxlen=self.time_len)
+        # init with dt's matching ref. speed
+        for i in range(self.time_len, 0, -1):
+            self.timing_buff.append(self.last_called - i*self.inv_ref_speed)
 
-        error_code = wiringpi.wiringPiSetupGpio()
-        if error_code != 0:
-            err_message = "Cannot setup wiringPi: {}".format(error_code)
-            self._logger.error(err_message)
-            raise OSError(err_message)
-        self._logger.info("wiringpi gpio setup successful")
-        wiringpi.pinMode(self.pin, wiringpi.GPIO.INPUT)
+        # GPIO
+        self.gpio = pigpio.pi()
+        # set to input
+        self.gpio.set_mode(self.pin, pigpio.INPUT)
         self._logger.info(
-            "wiringpi pin %s set to GPIO input",
+            "pin %s set to GPIO input",
+            self.pin)
+        # activate internal pull-up resistor
+        self.gpio.set_pull_up_down(self.pin, pigpio.PUD_UP)
+
+        self._logger.info(
+            "pin %s set to GPIO pull-up",
             self.pin)
 
-        wiringpi.pullUpDnControl(self.pin, wiringpi.GPIO.PUD_UP)
+        self.pi_callback_handle = self.gpio.callback(self.pin, pigpio.FALLING_EDGE, self._filter_callback)
+
         self._logger.info(
-            "wiringpi pin %s set to GPIO pull-up set",
+            "callback on  pin %s falling edge set",
             self.pin)
-
-        wiringpi.wiringPiISR(
-            self.pin, wiringpi.GPIO.INT_EDGE_FALLING,
-            self._filter_callback)
-
-        self._logger.info(
-            "wiringpi pin %s set to GPIO ISR edge: %s",
-            self.pin,  wiringpi.GPIO.INT_EDGE_FALLING)
 
         self._logger.info("Instantiation successful")
 
-    def _filter_callback(self, debounce_time: float = 0.1) -> None:
+    def _filter_callback(self, gpio, level, tick) -> None:
         """ debouncing filter
         Only trigger if time since last trigger is more that
         debounce_time (in seconds)
             Args:
             debounce_time (float): the minimum time (in seconds) required between triggers (default 0.1s)
         """
-        self._logger.debug("ISR filter callback triggered")
-        now = time.time()
-        dt = now-self.last_called
-        if dt > debounce_time:
-            self._logger.debug('pulse detected')
-            self.timing_buff.append(now)
-        self.last_called = time.time()
+        # confirm the context is ok (right pin, level change to 0)
+        if (gpio == self.pin and level == 0):
+            # self._logger.debug("ISR filter callback triggered")
+            debounce_time: float = 0.1
+            now = time.time()
+            dt = now - self.last_called
+            if dt > debounce_time:
+                self._logger.debug('pulse detected')
+                self.timing_buff.append(now)
+                self.callback(self.get_speed())
+
+            self.last_called = time.time()
 
     def get_speed(self) -> float:
+        """Get wheel speed as time elapsed for the last 20 pulses
+
+        Returns:
+            float: wheel speed ratio with reference
+        """
         # speed in cps
-        speed = 10 / (self.timing_buff[9]-self.timing_buff[0])
-        self._logger.debug("speed: {speed} CpS")
-        # convert speed to kph
-        speed = self.cps_2_kph*speed
-        self._logger.debug("speed: {speed} km/h")
+        speed = 20 / (self.timing_buff[-1] - self.timing_buff[0])
+        self._logger.debug(f"speed: {speed} CpS")
         # speed as percent of target
-        self._logger.debug("speed: {speed/self.ref_speed} % of target")
-        return speed
+        self._logger.debug(f"speed: {speed*self.inv_ref_speed} % of target")
+        return speed * self.inv_ref_speed
+
+    def get_speed2(self) -> float:
+        """Compute speed as number pulses in the last 5s
+
+        Returns:
+            float: wheel speed ratio with reference
+        """
+        inv_dt = 0.20
+        now = time.time()
+        i = bisect.bisect_left(self.timing_buff, now-5)
+        speed = (self.time_len-i)*inv_dt
+        return speed * self.inv_ref_speed
+
