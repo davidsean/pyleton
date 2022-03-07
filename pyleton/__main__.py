@@ -1,5 +1,3 @@
-
-
 import argparse
 
 from pyleton.bike_player import BikePlayer
