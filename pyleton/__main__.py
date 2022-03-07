@@ -22,4 +22,5 @@ if __name__ == '__main__':
 
     while True:
         time.sleep(1)
-        print(ws.get_speed())
+        print(f'speed1: {ws.get_speed()}')
+        print(f'speed2: {ws.get_speed2()}\n')
