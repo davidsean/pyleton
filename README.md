@@ -31,3 +31,7 @@ activate venv
 source pyleton-venv/bin/activate
 ```
 
+```bash
+docker compose -f docker/docker-compose.yaml build
+docker compose -f docker/docker-compose.yaml up
+```
