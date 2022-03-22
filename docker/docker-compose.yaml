@@ -6,11 +6,8 @@ services:
     build:
       context: ../
       dockerfile: docker/dev/Dockerfile
-    devices:
-      - "/dev/gpiomem:/dev/gpiomem"
     environment:
-      - RABBITMQ_HIST=rabbitmq:5672
-
+      - RABBITMQ_HOST=rabbitmq:5672
 
   rabbitmq:
     container_name: rabbitmq
