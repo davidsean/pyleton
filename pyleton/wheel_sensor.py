@@ -1,8 +1,10 @@
 # -*- coding: utf-8 -*-
 
 import time
+import bisect
 import logging
 import collections
+
 import pigpio
 
 from statistics import mean
@@ -45,11 +47,12 @@ class WheelSensor:
         self._logger.info(
             "ref speed of %s cps", 1 / self.inv_ref_speed)
         self.last_called = time.time()
-
         #  init the pulse buffer with pulses one second apart
-        self.timing_buff = collections.deque(maxlen=10)
-        for i in range(10):
-            self.timing_buff.append(self.last_called + i)
+        self.time_len = 20
+        self.timing_buff = collections.deque(maxlen=self.time_len)
+        # init with dt's matching ref. speed
+        for i in range(self.time_len, 0, -1):
+            self.timing_buff.append(self.last_called - i*self.inv_ref_speed)
 
         # GPIO
         self.gpio = pigpio.pi()
@@ -94,14 +97,27 @@ class WheelSensor:
             self.last_called = time.time()
 
     def get_speed(self) -> float:
-        """Get wheel speed
+        """Get wheel speed as time elapsed for the last 20 pulses
 
-        :return: wheel speed ratio with reference
-        :rtype: float
+        Returns:
+            float: wheel speed ratio with reference
         """
         # speed in cps
-        speed = 10 / (self.timing_buff[9] - self.timing_buff[0])
+        speed = 20 / (self.timing_buff[-1] - self.timing_buff[0])
         self._logger.debug(f"speed: {speed} CpS")
         # speed as percent of target
         self._logger.debug(f"speed: {speed*self.inv_ref_speed} % of target")
         return speed * self.inv_ref_speed
+
+    def get_speed2(self) -> float:
+        """Compute speed as number pulses in the last 5s
+
+        Returns:
+            float: wheel speed ratio with reference
+        """
+        inv_dt = 0.20
+        now = time.time()
+        i = bisect.bisect_left(self.timing_buff, now-5)
+        speed = (self.time_len-i)*inv_dt
+        return speed * self.inv_ref_speed
+

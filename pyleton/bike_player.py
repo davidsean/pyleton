@@ -1,5 +1,6 @@
-import vlc
 import time
+
+import vlc
 
 
 class BikePlayer:
@@ -24,6 +25,8 @@ class BikePlayer:
         media = self.vlc_instance.media_new(fname)
 
         self.player.set_media(media)
+        self.player.audio_set_mute(True)
+        self.player.toggle_fullscreen()
         self.player.play()
 
     def set_speed(self, rate: float):
